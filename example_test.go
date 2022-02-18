@@ -3,7 +3,7 @@ package errors_test
 import (
 	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/ztjryg4/errors"
 )
 
 func ExampleNew() {
@@ -202,4 +202,11 @@ func ExampleCause_printf() {
 	fmt.Printf("%v", err)
 
 	// Output: failed: hello world
+}
+
+func ExampleStatusCode() {
+	var err error
+
+	err = errors.WithStatusCode(0, "error with default status code")
+	fmt.Println(err)
 }

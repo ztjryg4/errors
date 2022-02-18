@@ -224,6 +224,39 @@ func TestWithMessagef(t *testing.T) {
 	}
 }
 
+func TestWithStatusCode(t *testing.T) {
+	tests := []struct {
+		code     int
+		message  string
+		wantCode int
+	}{
+		{
+			code:     0,
+			message:  "status code 0",
+			wantCode: 0,
+		},
+		{
+			code:     -1,
+			message:  "status code -1",
+			wantCode: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		got := WithStatusCode(tt.code, tt.message)
+		err, ok := got.(*withStatusCode)
+		if !ok {
+			t.Errorf("WithStatusCode(%v, %q): error type got: %T, want *withStatusCode",
+				tt.code, tt.message, got)
+		}
+
+		if err.Code() != tt.wantCode {
+			t.Errorf("WithStatusCode(%v, %q): got: %v, want %v",
+				tt.code, tt.message, err.code, tt.wantCode)
+		}
+	}
+}
+
 // errors.New, etc values are not expected to be compared by value
 // but the change in errors#27 made them incomparable. Assert that
 // various kinds of errors have a functional equality operator, even

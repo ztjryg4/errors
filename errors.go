@@ -93,8 +93,11 @@
 package errors
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // New returns an error with the supplied message.
@@ -260,6 +263,127 @@ func (w *withMessage) Format(s fmt.State, verb rune) {
 		io.WriteString(s, w.Error())
 	}
 }
+
+type withStatusCode struct {
+	err   error
+	code  int
+	cause error
+	*stack
+}
+
+func WithStatusCode(code int, format string, args ...interface{}) error {
+	return &withStatusCode{
+		err:   fmt.Errorf(format, args...),
+		code:  code,
+		cause: nil,
+		stack: callers(),
+	}
+}
+
+func WrapC(err error, code int, format string, args ...interface{}) error {
+	return WrapStatusCode(err, code, format, args...)
+}
+
+func WrapStatusCode(err error, code int, format string, args ...interface{}) error {
+	if err == nil {
+		return nil
+	}
+
+	return &withStatusCode{
+		err:   fmt.Errorf(format, args...),
+		code:  code,
+		cause: err,
+		stack: callers(),
+	}
+}
+
+func (w *withStatusCode) Error() string { return fmt.Sprintf("%v", w) }
+
+func (w *withStatusCode) Cause() error { return w.cause }
+
+func (w *withStatusCode) Unwrap() error { return w.cause }
+
+func (w *withStatusCode) Format(s fmt.State, verb rune) {
+	output := bytes.NewBuffer([]byte{})
+
+	switch verb {
+	case 'v':
+		var errInfo map[string]interface{}
+
+		// 以 JSON 格式输出
+		flagJSON := s.Flag('#')
+		// 打印全部错误堆栈
+		flagFullTrace := s.Flag('+')
+
+		// 打印父级 error
+		if flagFullTrace && w.Cause() != nil {
+			format := "%"
+			if _, ok := w.Cause().(*withStatusCode); flagJSON && ok {
+				format += "#"
+			}
+			if flagFullTrace {
+				format += "+"
+			}
+			format += "v\n"
+			fmt.Fprintf(s, format, w.Cause())
+		}
+
+		code, ok := statusCodeMap[w.code]
+		if !ok {
+			code = statusCodeMap[-1]
+		}
+
+		// 打印当前 error
+		if flagJSON {
+			// error base info
+			errInfo = map[string]interface{}{
+				"message": code.String(),
+				"code":    code.Code(),
+				"error":   w.err.Error(),
+			}
+			// caller info
+			var caller string
+			if w.stack != nil {
+				f := Frame((*w.stack)[0])
+				caller = fmt.Sprintf("%s:%d (%s)",
+					f.file(),
+					f.line(),
+					f.name(),
+				)
+			}
+			errInfo["caller"] = caller
+			// marshall
+			jsonBytes, _ := json.Marshal(errInfo)
+			output.Write(jsonBytes)
+		} else {
+			if w.stack != nil {
+				f := Frame((*w.stack)[0])
+				fmt.Fprintf(output, "[%s:%d (%s)] [(%d) %s] %s \n",
+					f.file(),
+					f.line(),
+					f.name(),
+					code.Code(),
+					code.String(),
+					w.err.Error(),
+				)
+			} else {
+				fmt.Fprintf(output, "[(%d) %s] %s \n",
+					code.Code(),
+					code.String(),
+					w.err.Error(),
+				)
+			}
+		}
+
+		fmt.Fprintf(s, "%s", strings.Trim(output.String(), "\r\n\t"))
+
+	case 's':
+		code, _ := statusCodeMap[w.code]
+		io.WriteString(s, code.String())
+	}
+}
+
+func (w *withStatusCode) Code() int { return w.code }
 
 // Cause returns the underlying cause of the error, if possible.
 // An error value has a cause if it implements the following

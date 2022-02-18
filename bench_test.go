@@ -9,18 +9,25 @@ import (
 	stderrors "errors"
 )
 
-func noErrors(at, depth int) error {
+func stdErrors(at, depth int) error {
 	if at >= depth {
 		return stderrors.New("no error")
 	}
-	return noErrors(at+1, depth)
+	return stdErrors(at+1, depth)
 }
 
-func yesErrors(at, depth int) error {
+func normalErrors(at, depth int) error {
 	if at >= depth {
-		return New("ye error")
+		return New("normal error")
 	}
-	return yesErrors(at+1, depth)
+	return normalErrors(at+1, depth)
+}
+
+func statusCodeErrors(at, depth int) error {
+	if at >= depth {
+		return WithStatusCode(0, "status code error")
+	}
+	return statusCodeErrors(at+1, depth)
 }
 
 // GlobalE is an exported global to store the result of benchmark results,
@@ -29,28 +36,35 @@ var GlobalE interface{}
 
 func BenchmarkErrors(b *testing.B) {
 	type run struct {
-		stack int
-		std   bool
+		stack   int
+		errType int
 	}
 	runs := []run{
-		{10, false},
-		{10, true},
-		{100, false},
-		{100, true},
-		{1000, false},
-		{1000, true},
+		{10, 0},
+		{10, 1},
+		{10, 2},
+		{100, 0},
+		{100, 1},
+		{100, 2},
+		{1000, 0},
+		{1000, 1},
+		{1000, 2},
 	}
 	for _, r := range runs {
-		part := "pkg/errors"
-		if r.std {
-			part = "errors"
+		part := "errors"
+		if r.errType == 1 {
+			part = "ztjryg4/errors-normal"
+		} else if r.errType == 2 {
+			part = "ztjryg4/errors-statuscode"
 		}
 		name := fmt.Sprintf("%s-stack-%d", part, r.stack)
 		b.Run(name, func(b *testing.B) {
 			var err error
-			f := yesErrors
-			if r.std {
-				f = noErrors
+			f := stdErrors
+			if r.errType == 1 {
+				f = normalErrors
+			} else if r.errType == 2 {
+				f = statusCodeErrors
 			}
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -83,7 +97,7 @@ func BenchmarkStackFormatting(b *testing.B) {
 	for _, r := range runs {
 		name := fmt.Sprintf("%s-stack-%d", r.format, r.stack)
 		b.Run(name, func(b *testing.B) {
-			err := yesErrors(0, r.stack)
+			err := normalErrors(0, r.stack)
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -96,8 +110,61 @@ func BenchmarkStackFormatting(b *testing.B) {
 	for _, r := range runs {
 		name := fmt.Sprintf("%s-stacktrace-%d", r.format, r.stack)
 		b.Run(name, func(b *testing.B) {
-			err := yesErrors(0, r.stack)
+			err := normalErrors(0, r.stack)
 			st := err.(*fundamental).stack.StackTrace()
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				stackStr = fmt.Sprintf(r.format, st)
+			}
+			b.StopTimer()
+		})
+	}
+	GlobalE = stackStr
+}
+
+func BenchmarkStatusCodeStackFormatting(b *testing.B) {
+	type run struct {
+		stack  int
+		format string
+	}
+	runs := []run{
+		{10, "%s"},
+		{10, "%v"},
+		{10, "%+v"},
+		{10, "%#v"},
+		{10, "%#+v"},
+		{30, "%s"},
+		{30, "%v"},
+		{30, "%+v"},
+		{30, "%#v"},
+		{30, "%#+v"},
+		{60, "%s"},
+		{60, "%v"},
+		{60, "%+v"},
+		{60, "%#v"},
+		{60, "%#+v"},
+	}
+
+	var stackStr string
+	for _, r := range runs {
+		name := fmt.Sprintf("%s-stack-%d", r.format, r.stack)
+		b.Run(name, func(b *testing.B) {
+			err := statusCodeErrors(0, r.stack)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				stackStr = fmt.Sprintf(r.format, err)
+			}
+			b.StopTimer()
+		})
+	}
+
+	for _, r := range runs {
+		name := fmt.Sprintf("%s-stacktrace-%d", r.format, r.stack)
+		b.Run(name, func(b *testing.B) {
+			err := statusCodeErrors(0, r.stack)
+			st := err.(*withStatusCode).stack.StackTrace()
 			b.ReportAllocs()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
