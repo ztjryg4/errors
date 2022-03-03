@@ -271,6 +271,7 @@ type withStatusCode struct {
 	*stack
 }
 
+// WithStatusCode 创建带状态码的 error
 func WithStatusCode(code int, format string, args ...interface{}) error {
 	return &withStatusCode{
 		err:   fmt.Errorf(format, args...),
@@ -280,10 +281,13 @@ func WithStatusCode(code int, format string, args ...interface{}) error {
 	}
 }
 
+// WrapC 为已有的 error 包装一层带状态码的 error
+// WrapC 是 WithStatusCode 的简写形式
 func WrapC(err error, code int, format string, args ...interface{}) error {
 	return WrapStatusCode(err, code, format, args...)
 }
 
+// WrapStatusCode 为已有的 error 包装一层带状态码的 error
 func WrapStatusCode(err error, code int, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
