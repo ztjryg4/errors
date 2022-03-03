@@ -59,3 +59,20 @@ func IsStatusCode(err error, code int) bool {
 
 	return false
 }
+
+// ParseStatusCode 解析任何 error 到 StatusCode
+// 不包含业务状态码的 error 将返回保留的 unknownCode
+// 空 error 返回 nil
+func ParseStatusCode(err error) StatusCode {
+	if err == nil {
+		return nil
+	}
+
+	if v, ok := err.(*withStatusCode); ok {
+		if code, ok := statusCodeMap[v.code]; ok {
+			return code
+		}
+	}
+
+	return unknownCode
+}
